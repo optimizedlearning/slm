@@ -8,3 +8,5 @@ The model is GPT3, with comments describing where the various architectural deci
 To run: if you are on BU's SCC, you can start with `source scc_setup.sh`. 
 
 Then `python gpt_pile.py`.
+
+You can submit a job on SCC for a longer run with `qsub slm_gpt2_train.sh`
