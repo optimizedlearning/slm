@@ -1,7 +1,7 @@
 
 #!/bin/bash -l
 
-# Request 4 CPUs
+# Request 8 CPUs
 #$ -pe omp 8
 
 # Request 1 GPU
