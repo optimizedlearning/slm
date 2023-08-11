@@ -87,8 +87,13 @@ class TransformerBlock(nn.Module):
         # matrices in the attention layers, or even just all weights in the
         # transformer block.
         #
-        with torch.no_grad():
-            self.reduce_fc.weight *= 1.0 / np.sqrt(config.num_blocks)
+        # Complicating this story even further, I cannot find any evidence of
+        # this rescaling presented in the "official" code here:
+        # https://github.com/openai/gpt-2/blob/master/src/model.py
+        #
+        if config.recale_residuals:
+            with torch.no_grad():
+                self.reduce_fc.weight *= 1.0 / np.sqrt(config.num_blocks)
 
     def forward(self, data):
         """

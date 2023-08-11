@@ -14,3 +14,4 @@ log_bits_per_byte: False
 dataloader_workers: 4
 tokenizer_batch_size: 100 # this is the batch size for parellelism in the huggingface dataset, not the standard batch size
 prefetch_factor: 2
+

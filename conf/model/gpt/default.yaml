@@ -3,4 +3,5 @@ dim: 768
 num_heads: 12
 bias: False
 num_blocks: 12
-context_length: 100
+context_length: 100 # gpt2 context length is 1024
+rescale_residuals: False

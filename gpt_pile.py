@@ -107,7 +107,7 @@ def train(config: DictConfig) -> None:
         prefetch_factor=config.train.prefetch_factor)
 
     model = Model(config=config, tokenizer=tokenizer)
-    wandb_logger = WandbLogger(project="lightning_test")
+    wandb_logger = WandbLogger(project=config.wandb_project)
     # wandb_logger.watch(model)
     trainer = pl.Trainer(
         limit_train_batches=config.train.max_batches_per_epoch,

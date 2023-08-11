@@ -1,3 +1,5 @@
+wandb_project: slm_test
+
 defaults:
   - model: gpt/default
   - dataset: pile
