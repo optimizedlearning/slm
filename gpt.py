@@ -91,7 +91,7 @@ class TransformerBlock(nn.Module):
         # this rescaling presented in the "official" code here:
         # https://github.com/openai/gpt-2/blob/master/src/model.py
         #
-        if config.recale_residuals:
+        if config.rescale_residuals:
             with torch.no_grad():
                 self.reduce_fc.weight *= 1.0 / np.sqrt(config.num_blocks)
 
