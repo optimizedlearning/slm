@@ -1,0 +1,9 @@
+torch
+omegaconf
+hydra-core
+lightning
+datasets
+einops
+transformers
+wandb
+

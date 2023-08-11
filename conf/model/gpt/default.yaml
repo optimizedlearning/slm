@@ -1,0 +1,6 @@
+
+dim: 768
+num_heads: 12
+bias: False
+num_blocks: 12
+context_length: 100

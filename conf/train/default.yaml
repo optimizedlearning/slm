@@ -1,0 +1,16 @@
+max_batches_per_epoch: 10000
+max_epochs: 1
+precision: 16-mixed
+gradient_clip_val: 1.0
+gradient_clip_algorithm: norm
+lr_warmup: 1000
+lr_decay: linear
+lr: 0.0001
+weight_decay: 0.01
+batch_size: 128
+compile: False
+log_bits_per_byte: False
+
+dataloader_workers: 4
+tokenizer_batch_size: 100 # this is the batch size for parellelism in the huggingface dataset, not the standard batch size
+prefetch_factor: 2

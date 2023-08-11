@@ -1,0 +1,6 @@
+defaults:
+  - model: gpt/default
+  - dataset: pile
+  - train: default
+
+
