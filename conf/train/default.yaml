@@ -8,7 +8,6 @@ gradient_clip_algorithm: norm
 lr_warmup: 1000
 lr_decay: linear
 lr: 0.0001
-lr_schedule_progress: step # can be "step" or "time". If "time", then the lr schedule is set by using the ratio time_elapsed/max_time rather than steps/max_steps
 weight_decay: 0.01
 batch_size: 64
 compile: False

@@ -65,13 +65,17 @@ class Model(GPT):
 
         def lr_schedule(step):
             scale = 1.0
+            warmup_ratio = self.train_config.lr_warmup/self.train_config.lr_max_steps
+            current_ratio = step/self.train_config.max_steps
             if self.train_config.lr_warmup > 0:
-                scale *= min(1.0, step / self.train_config.lr_warmup)
-            if self.train_config.lr_decay == "linear":
-                scale *= 1.0 - step / self.train_config.max_steps
-            if self.train_config.lr_decay == "cosine":
+                scale *= min(1.0, current_ratio/warmup_ratio)
+
+            decay_type = self.train_config.lr_decay
+            if decay_type == "linear":
+                scale *= 1.0 - current_ratio
+            if decay_type == "cosine":
                 scale *= 0.5 * (
-                    1.0 + np.cos(np.pi * step / self.train_config.max_steps)
+                    1.0 + np.cos(np.pi * current_ratio)
                 )
             return scale
 
@@ -106,6 +110,10 @@ def train(config: DictConfig) -> None:
         max_length=config.model.context_length,
         split="train",
         text_key="text",
+        # we may not want to do the whole validation set, so
+        # let's just do the first few.
+        # it would be better to use a different chunk for each
+        # vaidation run, but this is easy and probably good enough.
         map_batch_size=config.train.tokenizer_batch_size,
         # this option usually makes data loading slow...
         # probably could be fixed.
@@ -166,7 +174,6 @@ def train(config: DictConfig) -> None:
         val_check_interval=config.train.val_check_interval,
         limit_val_batches=config.train.val_batches,
     )
-    # pl_model = Model(model=model, optimizer=optimizer, tokenizer=tokenizer)
     if config.train.compile:
         # In my tests, this actually somewhat slows things down.
         # It slows things down a LOT if you try to log bits/byte, I believe
