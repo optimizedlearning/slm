@@ -19,9 +19,10 @@ from gpt import GPT
 import train_lm
 import numpy as np
 
-from lightning.pytorch.callbacks import LearningRateMonitor
+from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from util import LogTrainMetrics
+import datetime
 
 
 class Model(GPT):
@@ -56,10 +57,10 @@ class Model(GPT):
             if self.train_config.lr_warmup > 0:
                 scale *= min(1.0, step / self.train_config.lr_warmup)
             if self.train_config.lr_decay == "linear":
-                scale *= 1.0 - step / self.train_config.max_batches_per_epoch
+                scale *= 1.0 - step / self.train_config.max_steps
             if self.train_config.lr_decay == "cosine":
                 scale *= 0.5 * (
-                    1.0 + np.cos(np.pi * step / self.train_config.max_batches_per_epoch)
+                    1.0 + np.cos(np.pi * step / self.train_config.max_steps)
                 )
             return scale
 
@@ -87,7 +88,7 @@ def train(config: DictConfig) -> None:
     tokenizer.pad_token = tokenizer.eos_token
     vocab_size = tokenizer.vocab_size
 
-    dataset = load_next_token_prediction(
+    train_dataset = load_next_token_prediction(
         config.dataset.path,
         config.dataset.name,
         tokenizer=tokenizer,
@@ -100,23 +101,53 @@ def train(config: DictConfig) -> None:
         preserve_non_numerical_keys=config.train.log_bits_per_byte,
     )
 
-    loader = DataLoader(
-        dataset,
+    valid_dataset = load_next_token_prediction(
+        config.dataset.path,
+        config.dataset.name,
+        tokenizer=tokenizer,
+        max_length=config.model.context_length,
+        split="valid",
+        text_key="text",
+        map_batch_size=config.train.tokenizer_batch_size,
+        # this option usually makes data loading slow...
+        # probably could be fixed.
+        preserve_non_numerical_keys=True,
+    )
+    valid_dataset = valid_dataset.remove_columns(['chunked_meta', 'chunked_text'])
+
+    train_loader = DataLoader(
+        train_dataset,
         batch_size=config.train.batch_size,
         num_workers=config.train.dataloader_workers,
         prefetch_factor=config.train.prefetch_factor)
 
+    valid_loader = DataLoader(
+        valid_dataset,
+        batch_size=config.train.batch_size)
+    
+
     model = Model(config=config, tokenizer=tokenizer)
-    wandb_logger = WandbLogger(project=config.wandb_project)
+    wandb_logger = WandbLogger(project=config.wandb.project)
     # wandb_logger.watch(model)
+
+
+  
+    checkpoint_callback = ModelCheckpoint(
+        dirpath=config.checkpoint.path,
+        train_time_interval=datetime.timedelta(minutes=config.checkpoint.frequency_mins),
+        save_top_k=config.checkpoint.num_to_keep,
+        filename=config.checkpoint.name_format,
+    )
+   
+    callbacks = [LearningRateMonitor(), LogTrainMetrics(), checkpoint_callback]
+    
     trainer = pl.Trainer(
-        limit_train_batches=config.train.max_batches_per_epoch,
-        max_epochs=config.train.max_epochs,
+        max_steps=config.train.max_steps,
         precision=config.train.precision,
         gradient_clip_val=config.train.gradient_clip_val,
         gradient_clip_algorithm=config.train.gradient_clip_algorithm,
         logger=wandb_logger,
-        callbacks=[LearningRateMonitor(), LogTrainMetrics()],
+        callbacks=callbacks,
     )
     # pl_model = Model(model=model, optimizer=optimizer, tokenizer=tokenizer)
     if config.train.compile:
@@ -124,7 +155,11 @@ def train(config: DictConfig) -> None:
         # It slows things down a LOT if you try to log bits/byte, I believe
         # because the data now contains strings that change every iteration.
         model = torch.compile(model)
-    trainer.fit(model=model, train_dataloaders=loader)
+    trainer.fit(
+        model=model,
+        train_dataloaders=train_loader,
+        valid_dataloaders=valid_loader,
+        )
 
 
 if __name__ == "__main__":
