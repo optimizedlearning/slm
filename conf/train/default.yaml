@@ -1,13 +1,16 @@
-max_batches_per_epoch: 10000
-max_epochs: 1
+max_steps: 1000
+max_time_hours: null # train for at most this many hours
+val_check_interval: 400
+val_batches: 200
 precision: 16-mixed
 gradient_clip_val: 1.0
 gradient_clip_algorithm: norm
 lr_warmup: 1000
 lr_decay: linear
 lr: 0.0001
+lr_schedule_progress: step # can be "step" or "time". If "time", then the lr schedule is set by using the ratio time_elapsed/max_time rather than steps/max_steps
 weight_decay: 0.01
-batch_size: 128
+batch_size: 64
 compile: False
 log_bits_per_byte: False
 

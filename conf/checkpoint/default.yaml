@@ -1,0 +1,4 @@
+frequency_mins: 60 # save every hour
+num_to_keep: -1 # keep all the checkpoints
+name_format: null
+path: null

@@ -11,8 +11,6 @@ from torch.utils.data import Dataset, DataLoader
 
 from einops import rearrange
 
-from util import NoOpContext
-
 import lightning.pytorch as pl
 
 import contextlib
@@ -60,35 +58,6 @@ def get_loss(
 
 
     return result
-
-
-def train_step(
-        model: Union[Callable, torch.nn.Module],
-        data: Any,
-        optimizer_fn: Callable,
-        train_contexts: List=[NoOpContext],
-        ignore_index: int=-100) -> None:
-
-    # This is some fancy stuff to allow for changing the number of contexts in future
-    # i.e. stacking a mixed precision context with some  other context.
-    with contextlib.ExitStack() as stack:
-        for context in train_contexts:
-            stack.enter_context(context)
-
-        model.zero_grad()
-
-        loss_data = get_loss(model, data, ignore_index)
-
-        loss_data['loss'].backward()
-
-        # We allow the optimizer function to use a loss closure here.
-        # if you explicitly don't want to do so, just wrap optimizer.step
-        # in a function that ignores its first argument before passing
-        # it to train_step like so:
-        # optimizer_fn = lambda _: optimizer.step()
-        # train_step(model, data, optimizer_fn)
-        #
-        optimizer_fn(lambda: get_loss(model, data, ignore_index)['loss'])
 
 
 

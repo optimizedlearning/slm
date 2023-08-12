@@ -19,10 +19,11 @@ from gpt import GPT
 import train_lm
 import numpy as np
 
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint, Timer
 
 from util import LogTrainMetrics
 import datetime
+import gc
 
 
 class Model(GPT):
@@ -39,10 +40,20 @@ class Model(GPT):
 
     def training_step(self, batch, batch_idx):
 
-        
         loss_data = train_lm.get_loss(self, batch, ignore_index=self.ignore_index)
 
+        # we don't need the logits, and they stick around in between
+        # batches and cause OOM errors.
+        del loss_data['logits']
 
+        return loss_data
+
+    def validation_step(self, batch, batch_idx):
+        loss_data = train_lm.get_loss(self, batch, ignore_index=self.ignore_index)
+
+        # we don't need the logits, and they stick around in between
+        # batches and cause OOM errors.
+        del loss_data['logits']
         return loss_data
 
     def configure_optimizers(self):
@@ -106,7 +117,7 @@ def train(config: DictConfig) -> None:
         config.dataset.name,
         tokenizer=tokenizer,
         max_length=config.model.context_length,
-        split="valid",
+        split="validation",
         text_key="text",
         map_batch_size=config.train.tokenizer_batch_size,
         # this option usually makes data loading slow...
@@ -128,8 +139,6 @@ def train(config: DictConfig) -> None:
 
     model = Model(config=config, tokenizer=tokenizer)
     wandb_logger = WandbLogger(project=config.wandb.project)
-    # wandb_logger.watch(model)
-
 
   
     checkpoint_callback = ModelCheckpoint(
@@ -138,8 +147,14 @@ def train(config: DictConfig) -> None:
         save_top_k=config.checkpoint.num_to_keep,
         filename=config.checkpoint.name_format,
     )
-   
-    callbacks = [LearningRateMonitor(), LogTrainMetrics(), checkpoint_callback]
+    
+    callbacks = [
+        LearningRateMonitor(),
+        LogTrainMetrics(),
+        checkpoint_callback
+    ]
+    if config.train.max_time_hours is not None:
+        callbacks.append(Timer({'hours': config.train.max_time_hours}))
     
     trainer = pl.Trainer(
         max_steps=config.train.max_steps,
@@ -148,6 +163,8 @@ def train(config: DictConfig) -> None:
         gradient_clip_algorithm=config.train.gradient_clip_algorithm,
         logger=wandb_logger,
         callbacks=callbacks,
+        val_check_interval=config.train.val_check_interval,
+        limit_val_batches=config.train.val_batches,
     )
     # pl_model = Model(model=model, optimizer=optimizer, tokenizer=tokenizer)
     if config.train.compile:
@@ -158,7 +175,7 @@ def train(config: DictConfig) -> None:
     trainer.fit(
         model=model,
         train_dataloaders=train_loader,
-        valid_dataloaders=valid_loader,
+        val_dataloaders=valid_loader,
         )
 
 

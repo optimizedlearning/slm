@@ -27,4 +27,5 @@ train.lr_warmup=10000 \
 train.lr=0.00005 \
 train.batch_size=8 \
 model.context_length=1024 \
-wandb_project=slm_gpt2
+wandb_project=slm_gpt2 \
+$@
