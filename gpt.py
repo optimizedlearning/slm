@@ -106,7 +106,7 @@ class TransformerBlock(nn.Module):
         # the intermediate layer is [Att]
         #
         out = self.ln1(data)
-        out = self.attn(data)
+        out = self.attn(out)
         post_attn = data + out
         out = self.ln2(post_attn)
         out = self.expand_fc(out)
