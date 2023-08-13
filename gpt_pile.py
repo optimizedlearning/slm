@@ -222,9 +222,12 @@ def train(config: DictConfig) -> None:
         callbacks.append(Timer({'hours': config.train.max_time_hours}))
 
     if config.train.compile:
-        # max-autotune mode will take longer to compile, but maybe it will
-        # be faster overall?
-        model = torch.compile(model, mode='max-autotune')
+        # we use the default compile mode.
+        # See compile mode descriptions here: https://pytorch.org/get-started/pytorch-2.0/#user-experience
+        # Using 'max-autotune' seems to  increase memory usage, especially on multiple GPUs.
+        # In my experiments, 1 V100 GPU could run GPT2 with a batch size of 8,
+        # but 2 GPUs would OOM with a batch size of 8 per GPU if mode='max-autotune'
+        model = torch.compile(model, mode='default')
 
     # define the trainer object. See
     # https://lightning.ai/docs/pytorch/latest/common/trainer.html#trainer
