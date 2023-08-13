@@ -1,8 +1,3 @@
-"""
-Trains on a language modeling corpus.
-"""
-
-
 from typing import Dict, Union, Callable, Any, List
 
 import torch
@@ -11,9 +6,13 @@ from torch.utils.data import Dataset, DataLoader
 
 from einops import rearrange
 
-import lightning.pytorch as pl
+# Tell torch.compile that rearrange should not break the graph
+# https://github.com/pytorch/pytorch/issues/93905
+# if you upgrade versions enough this is probably unnecessary: https://github.com/arogozhnikov/einops/issues/250
+from torch._dynamo import allow_in_graph
+allow_in_graph(rearrange)
 
-import contextlib
+import lightning.pytorch as pl
 
 def get_accuracy(
         logits: torch.Tensor,
@@ -27,13 +26,17 @@ def get_loss(
         model: Union[Callable, torch.nn.Module],
         data: Any,
         ignore_index: int=-100) -> Dict:
+
+    
     input = data['input_ids']    # [B, L]
     targets = data['targets'] # [B, L]
 
     logits = model(input)    # [B, L, C]
 
+    
     targets = rearrange(targets, 'B L -> (B L)')
     logits = rearrange(logits, 'B L C -> (B L) C')
+
 
     loss = F.cross_entropy(logits, targets, ignore_index=ignore_index)
 

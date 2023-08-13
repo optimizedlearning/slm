@@ -16,6 +16,14 @@ import lightning.pytorch as pl
 
 from einops import rearrange
 
+# Tell torch.compile that rearrange should not break the graph
+# https://github.com/pytorch/pytorch/issues/93905
+# if you upgrade versions enough this is probably unnecessary: https://github.com/arogozhnikov/einops/issues/250
+from torch._dynamo import allow_in_graph
+allow_in_graph(rearrange)
+
+
+
 
 class CausalSelfAttention(nn.Module):
     """
@@ -40,14 +48,20 @@ class CausalSelfAttention(nn.Module):
         data is [B, L, D]
         """
 
+        B, L, HD = data.size()
+        H = self.num_heads
+        D = HD // H
+
         keys = self.key_linear(data)  # [B, L, D] -> [B, L, D]
         queries = self.query_linear(data)  # [B, L, D] -> [B, L, D]
         values = self.value_linear(data)  # [B, L, D] -> [B, L, D]
+
 
         keys = rearrange(keys, "B L (H D) -> B H L D", H=self.num_heads)
         queries = rearrange(queries, "B L (H D) -> B H L D", H=self.num_heads)
         values = rearrange(values, "B L (H D) -> B H L D", H=self.num_heads)
 
+        # this should automatically employ FlashAttention        
         out = F.scaled_dot_product_attention(
             queries, keys, values, is_causal=True)
 
@@ -117,7 +131,7 @@ class TransformerBlock(nn.Module):
         return out
 
 
-class GPT(pl.LightningModule):
+class GPT(nn.Module):
     def __init__(self, vocab_size, config):
         super().__init__()
         self.config = config

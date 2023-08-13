@@ -9,11 +9,17 @@ lr_warmup: 1000
 lr_decay: linear
 lr: 0.0001
 weight_decay: 0.01
-batch_size: 64
-compile: False
-log_bits_per_byte: False
+per_device_batch_size: 64 # number of examples placed on each GPU
+compile: True
+log_bits_per_byte: True
 
-dataloader_workers: 4
-tokenizer_batch_size: 100 # this is the batch size for parellelism in the huggingface dataset, not the standard batch size
-prefetch_factor: 2
+
+# following settings chosen after
+# some experimentation with a tiny model.
+# may not be optimal for all machines, but
+# hopefully with a reasonably sized model this will
+# prevent dataloading from being the bottleneck.
+dataloader_workers: 2
+tokenizer_batch_size: 1 # this is the batch size for parellelism in the huggingface dataset, not the standard batch size
+prefetch_factor: null
 
