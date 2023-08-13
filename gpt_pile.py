@@ -1,5 +1,11 @@
 """
 trains a GPT model on "the pile" dataset
+
+Note: this script only works for single-gpu training
+lightning does not automatically shard iterable datasets
+across many gpus, so if you try with multiple gpus, it will silently
+replicate data across the gpus rather than giving different data
+to each gpu, resulting in no change vs just one gpu.
 """
 
 # library imports

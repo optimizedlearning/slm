@@ -4,7 +4,7 @@
 # Request 8 CPUs
 #$ -pe omp 8
 
-# Request 2 GPUs
+# Request 1 GPUs
 #$ -l gpus=1
 #$ -l gpu_c=7.0
 #$ -l gpu_memory=15G
@@ -19,7 +19,7 @@
 
 source scc_setup.sh
 
-# 225000 is roughly how many iterations we can get through in 12 hours with V100 GPUs
+# 225000 is roughly how many iterations we can get through in 12 hours a V100 GPUs
 # for some reason we OOM if we do batch size 8 on 2 gpus, but not on 1 gpu.
 # I think it's a torch.compile related thing...
 python gpt_pile.py \
