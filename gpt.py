@@ -135,18 +135,18 @@ class GPT(nn.Module):
     def __init__(self, vocab_size, config):
         super().__init__()
         self.config = config
-        # config = config.model
+
         self.vocab_size = vocab_size
         self.blocks = nn.Sequential(
             *[TransformerBlock(config) for _ in range(config.num_blocks)]
         )
 
-        self.token_embedding = nn.Embedding(vocab_size, config.dim)
+        self.token_embedding = nn.Embedding(self.vocab_size, config.dim)
         self.position_embedding = nn.Embedding(config.context_length, config.dim)
 
         self.ln = nn.LayerNorm(config.dim)
 
-        self.head = nn.Linear(config.dim, vocab_size, bias=config.bias)
+        self.head = nn.Linear(config.dim, self.vocab_size, bias=config.bias)
 
     def forward(self, token_indices):
 
@@ -162,12 +162,9 @@ class GPT(nn.Module):
         # No idea if current GPT-4 type stuff does more fancy things, but even
         # the results in [GPT3] looked amazing.
 
-        tokens = self.token_embedding(token_indices)
-        positions = self.position_embedding(
-            torch.arange(L, dtype=torch.long, device=device)
-        )
+        tokens = self.token_embedding(token_indices) # [B, L, D]
+        positions = self.position_embedding.weight[:L, :] # [L, D]
         data = tokens + positions
-
         out = self.blocks(data)
 
         # [GPT2] says to add an extra layer normalization after the transformer

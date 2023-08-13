@@ -30,7 +30,7 @@ class Model(pl.LightningModule):
 
         # load "actual" model - this class is basically a wrapper around
         # this inner model.
-        self.model = model_class(vocab_size=tokenizer.vocab_size, config=config.model)
+        self.model = model_class(vocab_size=len(tokenizer), config=config.model)
         self.config = config
 
         # in pytorch's cross_entropy loss, the field 'ignore_index' is a value that
@@ -79,7 +79,6 @@ class Model(pl.LightningModule):
         # can later be accessed via self.optimizers().optimizer.
         # See https://lightning.ai/docs/pytorch/latest/common/lightning_module.html#configure-optimizers
         # for description of the return values.
-        
         optimizer = torch.optim.AdamW(
             params=self.parameters(),
             lr=self.config.train.lr,
@@ -113,7 +112,7 @@ class Model(pl.LightningModule):
         }
 
 
-def get_dataloaders(config, tokenizer):
+def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
     # load train and validation datasets.
     # TODO: maybe consider https://github.com/mosaicml/streaming instead?
     # seems like it would be better when implementing resuming interrupted
@@ -133,7 +132,7 @@ def get_dataloaders(config, tokenizer):
         map_batch_size=config.train.tokenizer_batch_size,
         preserve_non_numerical_keys=config.train.log_bits_per_byte,
     )
-    if config.train.log_bits_per_byte:
+    if config.train.log_bits_per_byte and config.train.compile:
         # remove non-tensor columns from dataset:
         # we we do not do this then torch.compile will recompile the training
         # step every iteration because it does not know that the training step
@@ -152,7 +151,8 @@ def get_dataloaders(config, tokenizer):
         # probably could be fixed.
         preserve_non_numerical_keys=True,
     )
-    valid_dataset = valid_dataset.remove_columns(['chunked_meta', 'chunked_text'])
+    if config.train.compile:
+        valid_dataset = valid_dataset.remove_columns(['chunked_meta', 'chunked_text'])
 
     train_loader = DataLoader(
         train_dataset,
@@ -181,7 +181,6 @@ def train(config: DictConfig) -> None:
     # actually irrelevant.
     tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
     tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
-    vocab_size = tokenizer.vocab_size
 
     # define dataloaders
     train_loader, valid_loader = get_dataloaders(config, tokenizer)
@@ -223,6 +222,8 @@ def train(config: DictConfig) -> None:
         callbacks.append(Timer({'hours': config.train.max_time_hours}))
 
     if config.train.compile:
+        # max-autotune mode will take longer to compile, but maybe it will
+        # be faster overall?
         model = torch.compile(model, mode='max-autotune')
 
     # define the trainer object. See
