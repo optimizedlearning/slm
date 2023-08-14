@@ -33,7 +33,14 @@ def tokenize_for_next_token_prediction(
     if preserve_text:
         # this is super-hacky... ideally we would already know these strings
         # after encoding.
-        recovered_text = [tokenizer.decode(chunk) for chunk in chunks]
+        pad_index = tokenizer(tokenizer.pad_token)["input_ids"][0]
+
+        padding = np.count_nonzero(chunks == pad_index, axis=-1)
+        
+        
+        recovered_text = [
+            tokenizer.decode(chunk[:max_length+1-pad]) for chunk, pad in zip(chunks, padding)
+        ]
         result["chunked_" + text_key] = recovered_text
         result["chunked_bytes"] = [len(r_t.encode('utf-8')) for r_t in recovered_text]
 

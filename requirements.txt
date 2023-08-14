@@ -6,4 +6,6 @@ datasets
 einops
 transformers
 wandb
+mosaicml
+torchmetrics
 

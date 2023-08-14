@@ -22,23 +22,55 @@ def get_accuracy(
     correct = torch.sum(mask * (torch.argmax(logits, dim=-1) == targets))
     return correct / torch.sum(mask)
 
-def get_loss(
+def get_loss_data(
         model: Union[Callable, torch.nn.Module],
-        data: Any,
+        batch: Any,
         ignore_index: int=-100) -> Dict:
+    logits = get_output_from_batch(model, batch)
+    return get_loss_data_from_logits(logits, batch, ignore_index)
 
-    
-    input = data['input_ids']    # [B, L]
-    targets = data['targets'] # [B, L]
+
+
+def get_output_from_batch(
+        model: Union[Callable, torch.nn.Module],
+        batch: Any,
+        ignore_index: int=-100) -> Dict:
+    input = batch['input_ids']    # [B, L]
+    targets = batch['targets'] # [B, L]
 
     logits = model(input)    # [B, L, C]
 
+
+def get_only_loss_from_logits(
+        logits: torch.Tensor,
+        batch: Any,
+        ignore_index: int=-100) -> Dict:
+
+    targets = batch['targets'] # [B, L]
+    # logits should be [B, L, C]
     
     targets = rearrange(targets, 'B L -> (B L)')
     logits = rearrange(logits, 'B L C -> (B L) C')
 
 
     loss = F.cross_entropy(logits, targets, ignore_index=ignore_index)
+    return loss
+
+
+def get_loss_data_from_logits(
+        logits: torch.Tensor,
+        batch: Any,
+        ignore_index: int=-100) -> Dict:
+
+    targets = batch['targets'] # [B, L]
+    # logits should be [B, L, C]
+    
+    targets = rearrange(targets, 'B L -> (B L)')
+    logits = rearrange(logits, 'B L C -> (B L) C')
+
+
+    loss = F.cross_entropy(logits, targets, ignore_index=ignore_index)
+
 
     accuracy = get_accuracy(logits, targets, ignore_index)
 
@@ -48,14 +80,14 @@ def get_loss(
         'accuracy': accuracy,
     }
 
-    if 'chunked_bytes' in data:
+    if 'chunked_bytes' in batch:
         # If we were to compress the input using the predicted logits
         # and an arithmetic coder, then the total compressed length of a sequence 
         # (in bits) is simply the cross entropy loss (total loss, not average loss).
         # So, here we record the compression ratio in terms of number of average bits
         # to compress a byte of the original sequence. This metric has the advantage that
         # it is more "tokenizer independent", unlike loss and accuracy metrics.
-        total_bytes = torch.sum(data['chunked_bytes'])
+        total_bytes = torch.sum(batch['chunked_bytes'])
         result['bits_per_byte'] = (loss * torch.sum(targets != ignore_index)) / total_bytes
         
 

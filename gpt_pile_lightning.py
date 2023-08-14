@@ -16,7 +16,6 @@ from torch.utils.data import DataLoader
 from datasets import load_dataset
 import lightning.pytorch as pl
 from lightning.pytorch.loggers import WandbLogger
-from load_text import load_next_token_prediction
 from transformers import GPT2TokenizerFast
 import numpy as np
 import datetime
@@ -24,9 +23,10 @@ import datetime
 from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint, Timer
 
 # our code imports
-from util import LogTrainMetrics
+from logging_lightning import LogTrainMetrics
 import train_lm
 from gpt import GPT
+from load_text import load_next_token_prediction
 
 # This is the pytorch lightning module. In an effort to isolate lightning code,
 # the main model class "GPT" is as ordinary pytorch.nn.Module.
@@ -65,7 +65,7 @@ class Model(pl.LightningModule):
         # you can set self.automatic_optimizer=False in __init__() and put the training
         # logic in this training_step function, as described here:
         # https://lightning.ai/docs/pytorch/latest/model/manual_optimization.html
-        loss_data = train_lm.get_loss(self.model, batch, ignore_index=self.ignore_index)
+        loss_data = train_lm.get_loss_data(self.model, batch, ignore_index=self.ignore_index)
         # we don't need the logits, and they stick around in between
         # batches and cause OOM errors.
         del loss_data['logits']
@@ -249,7 +249,6 @@ def train(config: DictConfig) -> None:
     )
 
     # now we can train!
-    # this should take care of scaling to multiple gpus if available as well.
     trainer.fit(
         model=model,
         train_dataloaders=train_loader,
