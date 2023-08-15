@@ -43,7 +43,7 @@ class BitsPerByte(Metric):
         num_examples = torch.sum(targets != ignore_index)
 
         self.bits += torch.sum(loss * num_examples)
-        self.bytes += torch.sum(batch['chunked_bytes'])
+        self.bytes += torch.sum(batch['tokenized_bytes'])
 
     def compute(self):
         return self.bits / self.bytes

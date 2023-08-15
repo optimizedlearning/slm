@@ -19,9 +19,7 @@
 
 source scc_setup.sh
 
-# 225000 is roughly how many iterations we can get through in 12 hours a V100 GPUs
-# for some reason we OOM if we do batch size 8 on 2 gpus, but not on 1 gpu.
-# I think it's a torch.compile related thing...
+# 225000 is roughly how many iterations we can get through in 12 hours a V100 GPU
 python gpt_pile.py \
 train.max_steps=225000 \
 train.lr_warmup=10000 \

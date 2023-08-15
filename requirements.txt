@@ -8,4 +8,5 @@ transformers
 wandb
 mosaicml
 torchmetrics
+mosaicml-streaming
 
