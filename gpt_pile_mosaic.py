@@ -1,4 +1,3 @@
-
 import hydra
 import torch
 from omegaconf import OmegaConf, DictConfig
@@ -78,16 +77,11 @@ def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
     
     train_dataset = StreamingTextDataset(
         data_dir,
-        # tokenizer,
-        # max_length=config.model.context_length,
         split="train",
-        # text_key="text",
-        # record_bytes_tokenized=config.train.log_bits_per_byte,
         # shuffle=True,
         # shuffle_seed=123123
         # predownload=config.train.per_device_batch_size,
         batch_size=config.train.per_device_batch_size,
-        cache_limit='16gb'
     )
     train_loader = get_next_token_dataloader(
         train_dataset,
@@ -100,11 +94,7 @@ def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
 
     valid_dataset = StreamingTextDataset(
         data_dir,
-        # tokenizer,
-        # max_length=config.model.context_length,
         split="val",
-        # text_key="text",
-        # record_bytes_tokenized=config.train.log_bits_per_byte,
         # shuffle=True,
         # shuffle_seed=123123
         predownload=config.train.per_device_batch_size,
@@ -118,26 +108,6 @@ def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
         batch_size=config.train.per_device_batch_size)
 
     return train_loader, valid_loader
-    # train_loader = StreamingDataLoader(
-    #     train_dataset,
-    #     batch_size=config.train.per_device_batch_size,
-    #     num_workers=config.train.dataloader_workers,
-    #     prefetch_factor=config.train.prefetch_factor)
-
-    
-    # valid_dataset = StreamingNextTokenDataset(
-    #     data_dir,
-    #     tokenizer,
-    #     max_length=config.model.context_length,
-    #     split="val",
-    #     text_key="text",
-    #     record_bytes_tokenized=config.train.log_bits_per_byte,
-    #     shuffle=True,
-    #     shuffle_seed=123123
-    # )
-    # valid_loader = StreamingDataLoader(
-    #     valid_dataset,
-    #     batch_size=config.train.per_device_batch_size)
 
 
     
@@ -213,7 +183,6 @@ def train(config: DictConfig) -> None:
 
     # define dataloaders
     train_loader, valid_loader = get_dataloaders(config, tokenizer)
-    print("got dataloaders")
 
     # define lightning module
     model = Model(config=config, tokenizer=tokenizer)
@@ -285,7 +254,6 @@ def train(config: DictConfig) -> None:
 
     # now we can train!
     # this should take care of scaling to multiple gpus if available as well.
-    print("training...")
     trainer.fit()
 
 
