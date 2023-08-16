@@ -19,6 +19,8 @@ import numpy as np
 import threading
 import torch
 import functools
+from omegaconf import DictConfig
+from torch.utils.data import DataLoader
 
 
 # There is an deadlock issue in the implementation of StreamingDataset
@@ -170,3 +172,38 @@ def get_next_token_dataloader(
         dataset, collate_fn=collate_fn, batch_size=batch_size, **kwargs
     )
     return loader
+
+
+
+def get_dataloaders(data_dir: str, config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
+    # data_dir = '/projectnb/aclab/datasets/pile/mds'
+    
+    train_dataset = StreamingTextDataset(
+        data_dir,
+        split="train",
+        shuffle=True,
+        shuffle_seed=123123,
+        batch_size=config.train.per_device_batch_size,
+    )
+    train_loader = get_next_token_dataloader(
+        train_dataset,
+        tokenizer,
+        max_length=config.model.context_length,
+        record_bytes_tokenized=config.train.log_bits_per_byte,
+        batch_size=config.train.per_device_batch_size,
+        num_workers=config.train.dataloader_workers,
+        prefetch_factor=config.train.prefetch_factor)
+
+    valid_dataset = StreamingTextDataset(
+        data_dir,
+        split="val",
+        predownload=config.train.per_device_batch_size,
+    )
+    valid_loader = get_next_token_dataloader(
+        valid_dataset,
+        tokenizer,
+        max_length=config.model.context_length,
+        record_bytes_tokenized=config.train.log_bits_per_byte,
+        batch_size=config.train.per_device_batch_size)
+
+    return train_loader, valid_loader

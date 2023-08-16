@@ -29,4 +29,5 @@ train.val_batches=1000 \
 train.per_device_batch_size=8 \
 model.context_length=1024 \
 train.compile=True \
+train.precision='amp_fp16' \
 wandb.project=slm_gpt2

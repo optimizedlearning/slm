@@ -1,7 +1,6 @@
 import hydra
 import torch
 from omegaconf import OmegaConf, DictConfig
-from torch.utils.data import DataLoader
 
 import logging
 
@@ -9,7 +8,11 @@ from composer import Trainer
 from composer.models import ComposerModel
 from composer.loggers import WandBLogger
 from composer.algorithms import GradientClipping
-from composer.callbacks import SpeedMonitor, CheckpointSaver, LRMonitor, OptimizerMonitor
+from composer.callbacks import (
+    SpeedMonitor,
+    LRMonitor,
+    OptimizerMonitor,
+)
 
 from transformers import GPT2TokenizerFast
 
@@ -17,10 +20,7 @@ from transformers import GPT2TokenizerFast
 from logging_mosaic import Accuracy, BitsPerByte, Loss
 from train_lm import get_only_loss_from_logits
 from gpt import GPT
-from load_pile import StreamingTextDataset, get_next_token_dataloader
-from load_text import load_next_token_prediction
-
-import os
+from load_pile import get_dataloaders
 
 
 class Model(ComposerModel):
@@ -39,81 +39,39 @@ class Model(ComposerModel):
         self.ignore_index = tokenizer(tokenizer.pad_token)["input_ids"][0]
 
     def forward(self, batch):
-        '''
+        """
         batch is the output of the dataloader, so we need to process it
         to get the token indices to provde to self.model
-        '''
-        token_indices = batch['input_ids'] # [B, L]
+        """
+        token_indices = batch["input_ids"]  # [B, L]
         logits = self.model(token_indices)
         loss = get_only_loss_from_logits(logits, batch, self.ignore_index)
 
         return loss, logits
 
-
     # This torchmetrics stuff seems overly complicated, but apparently it might help
     # with doing metrics properly in distributed settings, so we'll try to make it work.
     def get_metrics(self, is_train):
         # see https://docs.mosaicml.com/projects/composer/en/stable/composer_model.html#metrics
-        metrics = {
-            'accuracy': Accuracy(),
-            'loss': Loss()
-        }
+        metrics = {"accuracy": Accuracy(), "loss": Loss()}
 
         if self.config.train.log_bits_per_byte:
-            metrics['bits_per_byte'] = BitsPerByte()
-        
+            metrics["bits_per_byte"] = BitsPerByte()
+
         return metrics
 
     def update_metric(self, batch, outputs, metric):
         metric.update(self, batch, outputs)
-
 
     def loss(self, loss_logits, batch):
         loss, logits = loss_logits
         return loss
 
 
-    
-def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
-    data_dir = '/projectnb/aclab/datasets/pile/mds'
-    
-    train_dataset = StreamingTextDataset(
-        data_dir,
-        split="train",
-        shuffle=True,
-        shuffle_seed=123123,
-        batch_size=config.train.per_device_batch_size,
-    )
-    train_loader = get_next_token_dataloader(
-        train_dataset,
-        tokenizer,
-        max_length=config.model.context_length,
-        record_bytes_tokenized=config.train.log_bits_per_byte,
-        batch_size=config.train.per_device_batch_size,
-        num_workers=config.train.dataloader_workers,
-        prefetch_factor=config.train.prefetch_factor)
-
-    valid_dataset = StreamingTextDataset(
-        data_dir,
-        split="val",
-        predownload=config.train.per_device_batch_size,
-    )
-    valid_loader = get_next_token_dataloader(
-        valid_dataset,
-        tokenizer,
-        max_length=config.model.context_length,
-        record_bytes_tokenized=config.train.log_bits_per_byte,
-        batch_size=config.train.per_device_batch_size)
-
-    return train_loader, valid_loader
-
-
-
 @hydra.main(version_base=None, config_path="conf", config_name="config_gpt")
 def train(config: DictConfig) -> None:
+    logging.getLogger("composer").setLevel("DEBUG")
 
-    logging.getLogger('composer').setLevel('DEBUG')
-    
     # hydra will load the config argument from conf/config_gpt.
     # see https://hydra.cc/docs/tutorials/basic/your_first_app/defaults/
     # you can override config values from the commandline like so:
@@ -129,23 +87,24 @@ def train(config: DictConfig) -> None:
     tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
 
     # define dataloaders
-    train_loader, valid_loader = get_dataloaders(config, tokenizer)
+    train_loader, valid_loader = get_dataloaders(
+        "/projectnb/aclab/datasets/pile/mds", config, tokenizer
+    )
+    # train_loader, valid_loader = get_dataloaders(config, tokenizer)
 
     # define lightning module
     model = Model(config=config, tokenizer=tokenizer)
-
 
     # wandb logger, as wrapped by pytorch lightning. This will make the wand logging
     # object accessible as self.log in the pytorch module.
     # it will also take care of initializing and tearing down the wandb logging process.
     # TODO: currently if the run is resumed, the wandb_logger will NOT resume from the
-    # same run id. This is mildly annoying to fix with the "autoresume" option to 
+    # same run id. This is mildly annoying to fix with the "autoresume" option to
     # Trainer because the checkpoint file is identified and loaded AFTER the wandb logger
     # is initialized. However, the wandb run id is indeed stored in the checkpoint, so if we
     # manually lookup the checkpoint file at this point, we would be able to load.
     wandb_logger = WandBLogger(project=config.wandb.project)
 
-  
     # start setting up callbacks. These are basically sets of functions that the
     # Trainer will call for us at appropriate times.
     callbacks = [LRMonitor(), SpeedMonitor(), OptimizerMonitor()]
@@ -160,7 +119,7 @@ def train(config: DictConfig) -> None:
         # Using 'max-autotune' seems to  increase memory usage, especially on multiple GPUs.
         # In my experiments, 1 V100 GPU could run GPT2 with a batch size of 8,
         # but 2 GPUs would OOM with a batch size of 8 per GPU if mode='max-autotune'
-        compile_config = {'mode': 'default'}
+        compile_config = {"mode": "default"}
     else:
         compile_config = None
 
@@ -173,8 +132,9 @@ def train(config: DictConfig) -> None:
     algorithms = []
     algorithms.append(
         GradientClipping(
-            clipping_type=config.train.gradient_clip_algorithm, # 'norm', 'adaptive', or 'value'
-            clipping_threshold=config.train.gradient_clip_val)
+            clipping_type=config.train.gradient_clip_algorithm,  # 'norm', 'adaptive', or 'value'
+            clipping_threshold=config.train.gradient_clip_val,
+        )
     )
 
     # define the trainer object. See
@@ -196,14 +156,15 @@ def train(config: DictConfig) -> None:
         save_folder="checkpoints/{run_name}",
         save_interval=f"{config.checkpoint.frequency_batches}ba",
         save_num_checkpoints_to_keep=config.checkpoint.num_to_keep,
-        save_filename=config.checkpoint.name_format or 'ep{epoch}-ba{batch}-rank{rank}.pt',
-        autoresume=config.run_name is not None
+        save_filename=config.checkpoint.name_format
+        or "ep{epoch}-ba{batch}-rank{rank}.pt",
+        autoresume=config.run_name is not None,
     )
     sd = trainer.state.state_dict()
-    del sd['model']
-    del sd['optimizers']
+    del sd["model"]
+    del sd["optimizers"]
     print("trainer state: ", sd)
-    print("logger state: ",wandb_logger.state_dict())
+    print("logger state: ", wandb_logger.state_dict())
 
     # now we can train!
     # this should take care of scaling to multiple gpus if available as well.
@@ -212,4 +173,3 @@ def train(config: DictConfig) -> None:
 
 if __name__ == "__main__":
     train()
-    

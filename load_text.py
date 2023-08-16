@@ -5,6 +5,9 @@ import numpy as np
 from einops import rearrange
 from functools import reduce
 
+from omegaconf import DictConfig
+from torch.utils.data import DataLoader
+
 
 def tokenize_for_next_token_prediction(
     examples,
@@ -101,3 +104,58 @@ def load_next_token_prediction(
     dataset = dataset.shuffle(seed=22, buffer_size=100)
 
     return dataset
+
+
+def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
+    # load train and validation datasets.
+    # TODO: maybe consider https://github.com/mosaicml/streaming instead?
+    # seems like it would be better when implementing resuming interrupted
+    # training, but may require the data to be actually stored somewhere more
+    # easily.
+    train_dataset = load_next_token_prediction(
+        config.dataset.path,
+        config.dataset.name,
+        tokenizer=tokenizer,
+        max_length=config.model.context_length,
+        split="train",
+        text_key="text",
+        # we may not want to do the whole validation set, so
+        # let's just do the first few.
+        # it would be better to use a different chunk for each
+        # vaidation run, but this is easy and probably good enough.
+        map_batch_size=config.train.tokenizer_batch_size,
+        preserve_non_numerical_keys=config.train.log_bits_per_byte,
+    )
+    if config.train.log_bits_per_byte and config.train.compile:
+        # remove non-tensor columns from dataset:
+        # we we do not do this then torch.compile will recompile the training
+        # step every iteration because it does not know that the training step
+        # ignores these string values.
+        train_dataset = train_dataset.remove_columns(['chunked_meta', 'chunked_text'])
+
+    valid_dataset = load_next_token_prediction(
+        config.dataset.path,
+        config.dataset.name,
+        tokenizer=tokenizer,
+        max_length=config.model.context_length,
+        split="validation",
+        text_key="text",
+        map_batch_size=config.train.tokenizer_batch_size,
+        # this option usually makes data loading slow...
+        # probably could be fixed.
+        preserve_non_numerical_keys=True,
+    )
+    if config.train.compile:
+        valid_dataset = valid_dataset.remove_columns(['chunked_meta', 'chunked_text'])
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=config.train.per_device_batch_size,
+        num_workers=config.train.dataloader_workers,
+        prefetch_factor=config.train.prefetch_factor)
+
+    valid_loader = DataLoader(
+        valid_dataset,
+        batch_size=config.train.per_device_batch_size)
+
+    return train_loader, valid_loader

@@ -39,6 +39,7 @@ def get_output_from_batch(
     targets = batch['targets'] # [B, L]
 
     logits = model(input)    # [B, L, C]
+    return logits
 
 
 def get_only_loss_from_logits(
@@ -80,14 +81,14 @@ def get_loss_data_from_logits(
         'accuracy': accuracy,
     }
 
-    if 'chunked_bytes' in batch:
+    if 'tokenized_bytes' in batch:
         # If we were to compress the input using the predicted logits
         # and an arithmetic coder, then the total compressed length of a sequence 
         # (in bits) is simply the cross entropy loss (total loss, not average loss).
         # So, here we record the compression ratio in terms of number of average bits
         # to compress a byte of the original sequence. This metric has the advantage that
         # it is more "tokenizer independent", unlike loss and accuracy metrics.
-        total_bytes = torch.sum(batch['chunked_bytes'])
+        total_bytes = torch.sum(batch['tokenized_bytes'])
         result['bits_per_byte'] = (loss * torch.sum(targets != ignore_index)) / total_bytes
         
 
