@@ -150,15 +150,6 @@ def train(config: DictConfig) -> None:
     # Trainer will call for us at appropriate times.
     callbacks = [LRMonitor(), SpeedMonitor(), OptimizerMonitor()]
 
-    # callbacks.append(
-    #     CheckpointSaver(
-    #         folder="checkpoints/{run_name}",
-    #         save_interval=f"{config.checkpoint.frequency_batches}ba",
-    #         num_checkpoints_to_keep=config.checkpoint.num_to_keep,
-    #         filename=config.checkpoint.name_format,
-    #     )
-    # )
-
     # if config.train.max_time_hours is not None:
     #     # this callback will stop the training after the specified number of hours.
     #     callbacks.append(Timer({'hours': config.train.max_time_hours}))
