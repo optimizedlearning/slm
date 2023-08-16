@@ -1,3 +1,5 @@
+run_name: null
+
 defaults:
   - model: gpt/default
   - dataset: pile

@@ -3,15 +3,15 @@ import torch
 from omegaconf import OmegaConf, DictConfig
 from torch.utils.data import DataLoader
 
+import logging
+
 from composer import Trainer
 from composer.models import ComposerModel
 from composer.loggers import WandBLogger
 from composer.algorithms import GradientClipping
 from composer.callbacks import SpeedMonitor, CheckpointSaver, LRMonitor, OptimizerMonitor
 
-from streaming import StreamingDataLoader
-
-from transformers import GPT2TokenizerFast, GPT2Tokenizer
+from transformers import GPT2TokenizerFast
 
 # our code imports
 from logging_mosaic import Accuracy, BitsPerByte, Loss
@@ -19,6 +19,8 @@ from train_lm import get_only_loss_from_logits
 from gpt import GPT
 from load_pile import StreamingTextDataset, get_next_token_dataloader
 from load_text import load_next_token_prediction
+
+import os
 
 
 class Model(ComposerModel):
@@ -78,9 +80,8 @@ def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
     train_dataset = StreamingTextDataset(
         data_dir,
         split="train",
-        # shuffle=True,
-        # shuffle_seed=123123
-        # predownload=config.train.per_device_batch_size,
+        shuffle=True,
+        shuffle_seed=123123,
         batch_size=config.train.per_device_batch_size,
     )
     train_loader = get_next_token_dataloader(
@@ -95,10 +96,7 @@ def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
     valid_dataset = StreamingTextDataset(
         data_dir,
         split="val",
-        # shuffle=True,
-        # shuffle_seed=123123
         predownload=config.train.per_device_batch_size,
-        cache_limit='16gb'
     )
     valid_loader = get_next_token_dataloader(
         valid_dataset,
@@ -110,63 +108,12 @@ def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
     return train_loader, valid_loader
 
 
-    
-def get_dataloaders_old(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
-    # load train and validation datasets.
-    # TODO: maybe consider https://github.com/mosaicml/streaming instead?
-    # seems like it would be better when implementing resuming interrupted
-    # training, but may require the data to be actually stored somewhere more
-    # easily.
-    train_dataset = load_next_token_prediction(
-        config.dataset.path,
-        config.dataset.name,
-        tokenizer=tokenizer,
-        max_length=config.model.context_length,
-        split="train",
-        text_key="text",
-        # we may not want to do the whole validation set, so
-        # let's just do the first few.
-        # it would be better to use a different chunk for each
-        # vaidation run, but this is easy and probably good enough.
-        map_batch_size=config.train.tokenizer_batch_size,
-        preserve_non_numerical_keys=config.train.log_bits_per_byte,
-    )
-    if config.train.log_bits_per_byte and config.train.compile:
-        # remove non-tensor columns from dataset:
-        # we we do not do this then torch.compile will recompile the training
-        # step every iteration because it does not know that the training step
-        # ignores these string values.
-        train_dataset = train_dataset.remove_columns(['chunked_meta', 'chunked_text'])
-
-    valid_dataset = load_next_token_prediction(
-        config.dataset.path,
-        config.dataset.name,
-        tokenizer=tokenizer,
-        max_length=config.model.context_length,
-        split="validation",
-        text_key="text",
-        map_batch_size=config.train.tokenizer_batch_size,
-        # this option usually makes data loading slow...
-        # probably could be fixed.
-        preserve_non_numerical_keys=config.train.log_bits_per_byte,
-    )
-    if config.train.log_bits_per_byte and config.train.compile:
-        valid_dataset = valid_dataset.remove_columns(['chunked_meta', 'chunked_text'])
-
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=config.train.per_device_batch_size,
-        num_workers=config.train.dataloader_workers,
-        prefetch_factor=config.train.prefetch_factor)
-
-    valid_loader = DataLoader(
-        valid_dataset,
-        batch_size=config.train.per_device_batch_size)
-
-    return train_loader, valid_loader
 
 @hydra.main(version_base=None, config_path="conf", config_name="config_gpt")
 def train(config: DictConfig) -> None:
+
+    logging.getLogger('composer').setLevel('DEBUG')
+    
     # hydra will load the config argument from conf/config_gpt.
     # see https://hydra.cc/docs/tutorials/basic/your_first_app/defaults/
     # you can override config values from the commandline like so:
@@ -191,20 +138,26 @@ def train(config: DictConfig) -> None:
     # wandb logger, as wrapped by pytorch lightning. This will make the wand logging
     # object accessible as self.log in the pytorch module.
     # it will also take care of initializing and tearing down the wandb logging process.
+    # TODO: currently if the run is resumed, the wandb_logger will NOT resume from the
+    # same run id. This is mildly annoying to fix with the "autoresume" option to 
+    # Trainer because the checkpoint file is identified and loaded AFTER the wandb logger
+    # is initialized. However, the wandb run id is indeed stored in the checkpoint, so if we
+    # manually lookup the checkpoint file at this point, we would be able to load.
     wandb_logger = WandBLogger(project=config.wandb.project)
 
   
-    # start setting up callbacks. These are basically sets of functions that pytorch lightning will
-    # call for us at appropriate times.
+    # start setting up callbacks. These are basically sets of functions that the
+    # Trainer will call for us at appropriate times.
     callbacks = [LRMonitor(), SpeedMonitor(), OptimizerMonitor()]
 
-    callbacks.append(
-        CheckpointSaver(
-            save_interval=f"{config.checkpoint.frequency_batches}ba",
-            num_checkpoints_to_keep=config.checkpoint.num_to_keep,
-            filename=config.checkpoint.name_format,
-        )
-    )
+    # callbacks.append(
+    #     CheckpointSaver(
+    #         folder="checkpoints/{run_name}",
+    #         save_interval=f"{config.checkpoint.frequency_batches}ba",
+    #         num_checkpoints_to_keep=config.checkpoint.num_to_keep,
+    #         filename=config.checkpoint.name_format,
+    #     )
+    # )
 
     # if config.train.max_time_hours is not None:
     #     # this callback will stop the training after the specified number of hours.
@@ -233,24 +186,33 @@ def train(config: DictConfig) -> None:
             clipping_threshold=config.train.gradient_clip_val)
     )
 
-    
-
     # define the trainer object. See
-    # https://docs.mosaicml.com/projects/comhttps://docs.mosaicml.com/projects/composer/en/stable/api_reference/generated/composer.Trainer.html
+    # https://docs.mosaicml.com/projects/composer/en/stable/api_reference/generated/composer.Trainer.html
     trainer = Trainer(
         model=model,
         train_dataloader=train_loader,
         max_duration=f"{config.train.max_steps}ba",
         eval_dataloader=valid_loader,
-        # loggers=[wandb_logger],
+        loggers=[wandb_logger],
         optimizers=optimizer,
         eval_interval=f"{config.train.val_check_interval}ba",
         eval_subset_num_batches=config.train.val_batches,
         precision=config.train.precision,
         algorithms=algorithms,
         callbacks=callbacks,
-        compile_config=compile_config
+        compile_config=compile_config,
+        run_name=config.run_name,
+        save_folder="checkpoints/{run_name}",
+        save_interval=f"{config.checkpoint.frequency_batches}ba",
+        save_num_checkpoints_to_keep=config.checkpoint.num_to_keep,
+        save_filename=config.checkpoint.name_format or 'ep{epoch}-ba{batch}-rank{rank}.pt',
+        autoresume=config.run_name is not None
     )
+    sd = trainer.state.state_dict()
+    del sd['model']
+    del sd['optimizers']
+    print("trainer state: ", sd)
+    print("logger state: ",wandb_logger.state_dict())
 
     # now we can train!
     # this should take care of scaling to multiple gpus if available as well.
