@@ -1,11 +1,10 @@
-
 #!/bin/bash -l
 
 # Request 8 CPUs
 #$ -pe omp 8
 
 # Request 1 GPUs
-#$ -l gpus=1
+#$ -l gpus=2
 #$ -l gpu_c=7.0
 #$ -l gpu_memory=15G
 
@@ -19,8 +18,10 @@
 
 source scc_setup.sh
 
+echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
+
 # 225000 is roughly how many iterations we can get through in 12 hours a V100 GPU
-TOKENIZERS_PARALLELISM=false python gpt_pile.py \
+TOKENIZERS_PARALLELISM=false python gpt_pile_lightning.py \
 train.max_steps=225000 \
 train.lr_warmup=10000 \
 train.lr=0.0001 \

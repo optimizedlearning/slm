@@ -1,10 +1,9 @@
-run_name: null
-
 defaults:
   - model: gpt/default
   - dataset: pile
   - train: default
   - checkpoint: default
   - wandb: default
+  - _self_ # see https://hydra.cc/docs/1.2/upgrades/1.0_to_1.1/default_composition_order/
 
-
+run_name: null

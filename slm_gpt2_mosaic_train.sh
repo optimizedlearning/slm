@@ -20,10 +20,10 @@
 source scc_setup.sh
 
 # 225000 is roughly how many iterations we can get through in 12 hours a V100 GPU
-TOKENIZERS_PARALLELISM=false python gpt_pile.py \
+TOKENIZERS_PARALLELISM=false python gpt_pile_mosaic.py \
 train.max_steps=225000 \
 train.lr_warmup=10000 \
-train.lr=0.0001 \
+train.lr=0.00005 \
 train.val_check_interval=25000 \
 train.val_batches=1000 \
 train.per_device_batch_size=8 \

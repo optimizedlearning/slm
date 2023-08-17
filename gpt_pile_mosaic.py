@@ -1,6 +1,8 @@
 import hydra
 import torch
 from omegaconf import OmegaConf, DictConfig
+import numpy as np
+import os
 
 import logging
 
@@ -12,6 +14,8 @@ from composer.callbacks import (
     SpeedMonitor,
     LRMonitor,
     OptimizerMonitor,
+    MemoryMonitor,
+    RuntimeEstimator,
 )
 
 from transformers import GPT2TokenizerFast
@@ -67,6 +71,23 @@ class Model(ComposerModel):
         loss, logits = loss_logits
         return loss
 
+def get_scheduler(config, optimizer):
+    def lr_schedule(step):
+        scale = 1.0
+        warmup_ratio = config.train.lr_warmup / config.train.max_steps
+        current_ratio = step / config.train.max_steps
+        if config.train.lr_warmup > 0:
+            scale *= min(1.0, current_ratio / warmup_ratio)
+
+        decay_type = config.train.lr_decay
+        if decay_type == "linear":
+            scale *= 1.0 - current_ratio
+        if decay_type == "cosine":
+            scale *= 0.5 * (1.0 + np.cos(np.pi * current_ratio))
+        return scale
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_schedule)
+    return scheduler
 
 @hydra.main(version_base=None, config_path="conf", config_name="config_gpt")
 def train(config: DictConfig) -> None:
@@ -77,7 +98,9 @@ def train(config: DictConfig) -> None:
     # you can override config values from the commandline like so:
     # python gpt_pile.py train.max_steps=100000 model.num_blocks=6
 
-    print(OmegaConf.to_yaml(config))
+    logging.info(OmegaConf.to_yaml(config))
+
+    logging.debug(OmegaConf.to_yaml(dict(os.environ)))
 
     # Load GPT tokenizer.
     # We need to specify a padding token, so we will use '<|pad|>'
@@ -107,7 +130,7 @@ def train(config: DictConfig) -> None:
 
     # start setting up callbacks. These are basically sets of functions that the
     # Trainer will call for us at appropriate times.
-    callbacks = [LRMonitor(), SpeedMonitor(), OptimizerMonitor()]
+    callbacks = [LRMonitor(), SpeedMonitor(), OptimizerMonitor(), MemoryMonitor(), RuntimeEstimator()]
 
     # if config.train.max_time_hours is not None:
     #     # this callback will stop the training after the specified number of hours.
@@ -129,6 +152,8 @@ def train(config: DictConfig) -> None:
         weight_decay=config.train.weight_decay,
     )
 
+    scheduler = get_scheduler(config, optimizer)
+
     algorithms = []
     algorithms.append(
         GradientClipping(
@@ -146,6 +171,8 @@ def train(config: DictConfig) -> None:
         eval_dataloader=valid_loader,
         loggers=[wandb_logger],
         optimizers=optimizer,
+        schedulers=scheduler,
+        step_schedulers_every_batch=True,
         eval_interval=f"{config.train.val_check_interval}ba",
         eval_subset_num_batches=config.train.val_batches,
         precision=config.train.precision,
@@ -159,12 +186,11 @@ def train(config: DictConfig) -> None:
         save_filename=config.checkpoint.name_format
         or "ep{epoch}-ba{batch}-rank{rank}.pt",
         autoresume=config.run_name is not None,
+        console_log_interval='10ba',
     )
-    sd = trainer.state.state_dict()
-    del sd["model"]
-    del sd["optimizers"]
-    print("trainer state: ", sd)
-    print("logger state: ", wandb_logger.state_dict())
+
+    # upload the config
+    trainer.logger.log_hyperparameters(OmegaConf.to_container(config))
 
     # now we can train!
     # this should take care of scaling to multiple gpus if available as well.

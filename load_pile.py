@@ -21,7 +21,20 @@ import torch
 import functools
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
+from streaming.base.dataset import _IterState
+import os
+import pathlib
+import hashlib
 
+
+# The streaming module uses inter-process shared memory (https://docs.python.org/3/library/multiprocessing.shared_memory.html).
+# If for any reason a process using this module needs to be manually killed (e.g. with kill -9),
+# then it will not clean up the shared memory.
+# The next time you launch the training run, it will notice that the shared memory is already in use.
+# So, we clean it up by just iterating through all the possible shared memory locations and unlinking them.
+# This will cause a problem if you try to run two different jobs in parallel on the same machine.
+# I'm going to assume that that is unlikely.
+streaming.base.util.clean_stale_shared_memory()
 
 # There is an deadlock issue in the implementation of StreamingDataset
 # when the process creates an iterator of the StreamingDataset
@@ -39,7 +52,7 @@ from torch.utils.data import DataLoader
 # make this _kill_iterators function be called to clean up the threads.
 def _kill_iterators(dataset):
     # dataset._iterator.exit() will spin waiting for 2 threads to exit.
-    # since forking does not copy threads, if we call this from a child fork
+    # Since forking does not copy threads, if we call this from a child fork
     # then the fork will spin forever since there are no threads to exit.
     # So, we would need to call it from only a process that spawned the threads
     # in the first place. We could record this pid when creating the threads, but
@@ -49,14 +62,9 @@ def _kill_iterators(dataset):
     # that the threads check on to see if they should exit:
     if hasattr(dataset, "_iterator"):
         with dataset._iterator._lock:
-            if dataset._iterator._state == 0:  # _IterState.ITERATING
-                dataset._iterator._state = 1  # _IterState.EXITING
-            elif dataset._iterator._state == 1:  # _IterState.EXITING
-                pass
-            elif dataset._iterator._state == 2:  # _IterState.EXITED
-                return
-            else:
-                raise RuntimeError(f"Invalid _IterState: {dataset._iterator._state}")
+            if dataset._iterator._state == _IterState.ITERATING:
+                # Possible states are ITERATING, EXITING, EXITED
+                dataset._iterator._state = _IterState.EXITING
 
 
 class StreamingTextDataset(streaming.StreamingDataset):
@@ -70,8 +78,11 @@ class StreamingTextDataset(streaming.StreamingDataset):
         # same name every time. It will then complain that the cache dir exists (unless it's
         # been so long that that the temp dirs have been cleaned up of course).
         # So, we will set the cache directory ourselves and provide it as the "local" argument.
-        # Apparently it doesn't complain if it a non-temp directory already exists...
-        self.cache_dir = "streaming_decompression_cache_dir_safe_to_delete/"
+        # Then, we create in a way that will not complain if it already exists.
+        self.cache_dir = os.path.join(
+            "streaming_decompression_cache_dir_safe_to_delete",
+            hashlib.md5(data_dir.encode('ascii')).hexdigest())
+        pathlib.Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
         super().__init__(
             remote=data_dir,
             local=self.cache_dir,
@@ -85,8 +96,6 @@ class StreamingTextDataset(streaming.StreamingDataset):
         raw_text_data = super().get_item(idx)
         raw_text_data["idx"] = idx
         return raw_text_data
-        # tokenized_text_data = self._tokenize(raw_text_data, idx)
-        # return tokenized_text_data
 
 
 # see: https://pytorch.org/docs/stable/data.html#dataloader-collate-fn
