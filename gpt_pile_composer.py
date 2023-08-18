@@ -24,12 +24,11 @@ from transformers import GPT2TokenizerFast
 
 # our code imports
 from logging_composer import Accuracy, BitsPerByte, Loss
-from train_lm import get_only_loss_from_logits
+from loss_utils import get_only_loss_from_logits
 from gpt import GPT
-from load_pile import get_dataloaders
+from load_text_streaming import get_dataloaders
 from wandb_logger_autoresume import WandBLoggerWithAutoResume
 from progress_bar_autoresume import ProgressBarWithAutoResume
-
 
 
 class Model(ComposerModel):
@@ -167,7 +166,6 @@ def train(config: DictConfig) -> None:
         RuntimeEstimator(),
     ]
 
-
     if config.train.compile:
         # we use the default compile mode.
         # See compile mode descriptions here: https://pytorch.org/get-started/pytorch-2.0/#user-experience
@@ -239,20 +237,23 @@ def patch_dist_init():
     # non-rank 0 processes get a "delayed start" so that the rank 0 one
     # hits the barrier first, then things seem to be ok.
     # NOTE: This has only been tested in 2 processes.
-    
+
     # It sometimes also has error: RuntimeError: Broken pipe
     # occuring in _store_based_barrier when initializing torch.distributed.
     # This race seems less common, so it is as yet unlear if this hack also
     # fixes it or not.
     import torch
+
     old_init_process_group_fn = torch.distributed.init_process_group
+
     def new_init_process_group_fn(*args, **kwargs):
         result = old_init_process_group_fn(*args, **kwargs)
         if composer.utils.dist.get_local_rank() != 0:
             time.sleep(1)
         return result
+
     torch.distributed.init_process_group = new_init_process_group_fn
-    
+
 
 if __name__ == "__main__":
     patch_dist_init()

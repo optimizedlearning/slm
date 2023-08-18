@@ -1,9 +1,14 @@
+"""
+loading text data using huggingface datasets in streaming mode
+Does not allow for random access, and so does not work well
+in distributed environments.
+"""
+
 from datasets import load_dataset
 import datasets
 import numpy as np
 
 from einops import rearrange
-from functools import reduce
 
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
@@ -39,13 +44,13 @@ def tokenize_for_next_token_prediction(
         pad_index = tokenizer(tokenizer.pad_token)["input_ids"][0]
 
         padding = np.count_nonzero(chunks == pad_index, axis=-1)
-        
-        
+
         recovered_text = [
-            tokenizer.decode(chunk[:max_length+1-pad]) for chunk, pad in zip(chunks, padding)
+            tokenizer.decode(chunk[: max_length + 1 - pad])
+            for chunk, pad in zip(chunks, padding)
         ]
         result["chunked_" + text_key] = recovered_text
-        result["chunked_bytes"] = [len(r_t.encode('utf-8')) for r_t in recovered_text]
+        result["chunked_bytes"] = [len(r_t.encode("utf-8")) for r_t in recovered_text]
 
     if preserve_other_keys:
         for key in examples:
@@ -131,7 +136,7 @@ def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
         # we we do not do this then torch.compile will recompile the training
         # step every iteration because it does not know that the training step
         # ignores these string values.
-        train_dataset = train_dataset.remove_columns(['chunked_meta', 'chunked_text'])
+        train_dataset = train_dataset.remove_columns(["chunked_meta", "chunked_text"])
 
     valid_dataset = load_next_token_prediction(
         config.dataset.path,
@@ -146,16 +151,17 @@ def get_dataloaders(config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
         preserve_non_numerical_keys=True,
     )
     if config.train.compile:
-        valid_dataset = valid_dataset.remove_columns(['chunked_meta', 'chunked_text'])
+        valid_dataset = valid_dataset.remove_columns(["chunked_meta", "chunked_text"])
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=config.train.per_device_batch_size,
         num_workers=config.train.dataloader_workers,
-        prefetch_factor=config.train.prefetch_factor)
+        prefetch_factor=config.train.prefetch_factor,
+    )
 
     valid_loader = DataLoader(
-        valid_dataset,
-        batch_size=config.train.per_device_batch_size)
+        valid_dataset, batch_size=config.train.per_device_batch_size
+    )
 
     return train_loader, valid_loader

@@ -1,7 +1,7 @@
 """
-Dataloading with mosaicml StremingDataset
+Dataloading with streaming.StreamingDataset
 This is actually significantly slower than the huggingface loader, but
-I suspect this may be mostly due to the fact that in the huggingface loader,
+I suspect this may be mostly due to the fact that in the huggingface loader
 we are tokenizing the entirety of each text, shuffling (with a buffer), and then
 providing to the model. This means that we don't need to load actual new text examples
 as fast, and works perfectly fine in a streaming setting.
@@ -75,7 +75,6 @@ class StreamingTextDataset(streaming.StreamingDataset):
             hashlib.md5(data_dir.encode("ascii")).hexdigest(),
         )
         pathlib.Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
-
 
         super().__init__(
             remote=data_dir,

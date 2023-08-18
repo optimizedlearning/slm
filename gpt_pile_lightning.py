@@ -22,7 +22,7 @@ from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint, Ti
 
 # our code imports
 from logging_lightning import LogTrainMetrics
-import train_lm
+import loss_utils
 from gpt import GPT
 from load_pile import get_dataloaders
 
@@ -63,7 +63,7 @@ class Model(pl.LightningModule):
         # you can set self.automatic_optimizer=False in __init__() and put the training
         # logic in this training_step function, as described here:
         # https://lightning.ai/docs/pytorch/latest/model/manual_optimization.html
-        loss_data = train_lm.get_loss_data(
+        loss_data = loss_utils.get_loss_data(
             self.model, batch, ignore_index=self.ignore_index
         )
         # we don't need the logits, and they stick around in between
@@ -73,7 +73,7 @@ class Model(pl.LightningModule):
         return loss_data
 
     def validation_step(self, batch, batch_idx):
-        loss_data = train_lm.get_loss_data(
+        loss_data = loss_utils.get_loss_data(
             self.model, batch, ignore_index=self.ignore_index
         )
         # we don't need the logits, and they stick around in between

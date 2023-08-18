@@ -1,6 +1,6 @@
 # Simple Small Language Model Training
 
-This repo is an attempt to set up training of a language model on the pile
+This repo is an attempt to set up training of a language model on the [pile](https://pile.eleuther.ai/)
 using a bunch of libraries: [huggingface](https://huggingface.co/), [wandb](https://wandb.ai), [pytorch lightning](https://lightning.ai/docs/pytorch/latest/), [composer](https://docs.mosaicml.com/projects/composer/en/stable/index.html), [streaming](https://github.com/mosaicml/streaming) and [hydra](https://hydra.cc/)
 
 The goal is to provide an example of how all these tools can be put together.
@@ -24,3 +24,19 @@ The composer implementation is the most fully-featured right now. So far, it can
 The resuming feature currently "spins" the dataloader to find get back to the correct example. This
 could probably be improved as the streaming dataset class is specifically designed to support random access
 rather than just iteration.
+
+
+## Overview of the files
+* clean_shared_memory.py: This one is just script to clean up some resources that might be left behind if
+a process doesn't exit properly. You probably don't need to run it very much.
+* gpt.py: This contains the pytorch modeling code for a gpt model.
+* gpt_pile_composer.py: This is a "main" script that trains a gpt model on the pile dataset. It uses `composer`.
+* gpt_pile_lightning.py: This trains using the pytorch lightning framework.
+* load_text_hf.py: Generates dataloaders for text data (including the pile) using huggingface `datasets` library in streaming mode.
+* load_text_streaming.py: Generates dataloaders for text data using mosaicML `streaming` library.
+* logging_lightning.py: Custom loggers for pytorch lightning specifying various metrics we want to store.
+* logging_composer.py: Custom logging metrics for use with composer.
+* loss_utils.py: code for computing various losses.
+* requirements.txt: lists module requirements. You can install with `pip install -r requirements.txt`
+* scc_setup.sh: When on the BU SCC, `source scc_setup.sh` will set up your environment (including `pip install`).
+* slm_*.sh: These scripts will train a GPT2-sized model. No tuning has been done on the hyperparameters. 
