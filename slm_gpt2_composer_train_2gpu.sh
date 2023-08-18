@@ -4,7 +4,7 @@
 #$ -pe omp 8
 
 # Request 1 GPUs
-#$ -l gpus=1
+#$ -l gpus=2
 #$ -l gpu_c=7.0
 #$ -l gpu_memory=15G
 
@@ -15,12 +15,14 @@
 #$ -m e
 
 
-
 source scc_setup.sh
 
-# TOKENIZERS_PARALLELISM=false disables some warnings from the tokenizers library
+
+# make sure we get rid of any lingering shared memory
+python clean_shared_memory.py
+# TOKENIZERS_PARALLELISM=false disables some warnings from the tokenizers library:
 # otherwise it detects multiprocessing and disables parallelism on its own with a warning.
-TOKENIZERS_PARALLELISM=false python gpt_pile_mosaic.py \
+TOKENIZERS_PARALLELISM=false composer -n 2 gpt_pile_composer.py \
 train.max_steps=225000 \
 train.lr_warmup=10000 \
 train.lr=0.00005 \

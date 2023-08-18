@@ -27,16 +27,6 @@ import pathlib
 import hashlib
 
 
-# The streaming module uses inter-process shared memory (https://docs.python.org/3/library/multiprocessing.shared_memory.html).
-# If for any reason a process using this module needs to be manually killed (e.g. with kill -9),
-# then it will not clean up the shared memory.
-# The next time you launch the training run, it will notice that the shared memory is already in use.
-# So, we clean it up by just iterating through all the possible shared memory locations and unlinking them.
-# This will cause a problem if you try to run two different jobs in parallel on the same machine.
-# I'm going to assume that that is unlikely.
-streaming.base.util.clean_stale_shared_memory()
-
-
 # There is an deadlock issue in the implementation of StreamingDataset
 # when the process creates an iterator of the StreamingDataset
 # and then exits before iterating through the entire dataset.
@@ -85,6 +75,8 @@ class StreamingTextDataset(streaming.StreamingDataset):
             hashlib.md5(data_dir.encode("ascii")).hexdigest(),
         )
         pathlib.Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
+
+
         super().__init__(
             remote=data_dir,
             local=self.cache_dir,

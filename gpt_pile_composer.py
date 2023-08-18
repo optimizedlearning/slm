@@ -1,11 +1,14 @@
+import os
+import time
+import logging
+
+
+import numpy as np
 import hydra
 import torch
 from omegaconf import OmegaConf, DictConfig
-import numpy as np
-import os
 
-import logging
-
+import composer
 from composer import Trainer
 from composer.models import ComposerModel
 from composer.algorithms import GradientClipping
@@ -25,6 +28,8 @@ from train_lm import get_only_loss_from_logits
 from gpt import GPT
 from load_pile import get_dataloaders
 from wandb_logger_autoresume import WandBLoggerWithAutoResume
+from progress_bar_autoresume import ProgressBarWithAutoResume
+
 
 
 class Model(ComposerModel):
@@ -113,12 +118,13 @@ def get_scheduler(config, optimizer):
 
 @hydra.main(version_base=None, config_path="conf", config_name="config_gpt")
 def train(config: DictConfig) -> None:
-    logging.getLogger("composer").setLevel("DEBUG")
-
     # hydra will load the config argument from conf/config_gpt.
-    # see https://hydra.cc/docs/tutorials/basic/your_first_app/defaults/
+    # see https://hydra.cc/docs/tutorials/basic/your_first_app/
     # you can override config values from the commandline like so:
     # python gpt_pile.py train.max_steps=100000 model.num_blocks=6
+
+    # make the composer framework print out all the logs
+    logging.getLogger("composer").setLevel("DEBUG")
 
     logging.info(OmegaConf.to_yaml(config))
 
@@ -126,16 +132,13 @@ def train(config: DictConfig) -> None:
 
     # Load GPT tokenizer.
     # We need to specify a padding token, so we will use '<|pad|>'
-    # In any event, I think ignore_index loss masking will make the padding token
-    # actually irrelevant.
     tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
     tokenizer.add_special_tokens({"pad_token": "<|pad|>"})
 
     # define dataloaders
-    train_loader, valid_loader = get_dataloaders(
+    train_loader, eval_loader = get_dataloaders(
         "/projectnb/aclab/datasets/pile/mds", config, tokenizer
     )
-    # train_loader, valid_loader = get_dataloaders(config, tokenizer)
 
     # define lightning module
     model = Model(config=config, tokenizer=tokenizer)
@@ -147,6 +150,12 @@ def train(config: DictConfig) -> None:
         project=config.wandb.project,
         resume=config.run_name is not None,
     )
+
+    # The default progress bar implementation doesn't work properly when resuming
+    # from a mid-epoch checkpoint. This mildly customized version does.
+    # Note that the trainer will complain at you for using, but it should
+    # be a drop-in replacement.
+    progress_bar = ProgressBarWithAutoResume()
 
     # start setting up callbacks. These are basically sets of functions that the
     # Trainer will call for us at appropriate times.
@@ -191,8 +200,8 @@ def train(config: DictConfig) -> None:
         model=model,
         train_dataloader=train_loader,
         max_duration=f"{config.train.max_steps}ba",
-        eval_dataloader=valid_loader,
-        loggers=[wandb_logger],
+        eval_dataloader=eval_loader,
+        loggers=[progress_bar],
         optimizers=optimizer,
         schedulers=scheduler,
         step_schedulers_every_batch=True,
@@ -220,5 +229,31 @@ def train(config: DictConfig) -> None:
     trainer.fit()
 
 
+def patch_dist_init():
+    # HACK: There appears to be some kind of race condition when using
+    # multiprocessing. With 2 processes, the rank 1 process will frequently
+    # error with the error:
+    # RuntimeError: CUDA error: CUDA-capable device(s) is/are busy or unavailable
+    # when hitting a barrier synchronization.
+    # It's unclear what exactly causes this, but if we make sure that the
+    # non-rank 0 processes get a "delayed start" so that the rank 0 one
+    # hits the barrier first, then things seem to be ok.
+    # NOTE: This has only been tested in 2 processes.
+    
+    # It sometimes also has error: RuntimeError: Broken pipe
+    # occuring in _store_based_barrier when initializing torch.distributed.
+    # This race seems less common, so it is as yet unlear if this hack also
+    # fixes it or not.
+    import torch
+    old_init_process_group_fn = torch.distributed.init_process_group
+    def new_init_process_group_fn(*args, **kwargs):
+        result = old_init_process_group_fn(*args, **kwargs)
+        if composer.utils.dist.get_local_rank() != 0:
+            time.sleep(1)
+        return result
+    torch.distributed.init_process_group = new_init_process_group_fn
+    
+
 if __name__ == "__main__":
+    patch_dist_init()
     train()

@@ -18,8 +18,9 @@
 
 source scc_setup.sh
 
-echo "CUDA_VISIBLE_DEVICES: $CUDA_VISIBLE_DEVICES"
 
+# make sure we get rid of any lingering shared memory
+python clean_shared_memory.py
 # 225000 is roughly how many iterations we can get through in 12 hours a V100 GPU
 TOKENIZERS_PARALLELISM=false python gpt_pile_lightning.py \
 train.max_steps=225000 \

@@ -8,14 +8,11 @@ The model is a GPT model, with comments describing where the various architectur
 
 To run: if you are on BU's SCC, you can start with `source scc_setup.sh`. 
 
-Then `python gpt_pile_mosaic.py`. or `python gpt_pile_lightning.py`.
+Then `python gpt_pile_composer.py`. or `python gpt_pile_lightning.py`.
 
-You can submit a job on SCC for a longer run with `qsub slm_gpt2_train_mosiac.sh`.
+You can submit a job on SCC for a longer run with `qsub slm_gpt2_train_composer.sh`.
 
-Multi-GPU jobs are currently suffering from some race conditions.
-You can run one with 2 gpus with `composer -n 2 gpt_pile_mosaic.py` or `qsub slm_gpt2_train_mosaic_2gpu.sh`.
-However, there is a nontrivial chance you will get an error that appears to arise in some
-synchronization code in the `streaming` library.
+You can run one with 2 gpus with `composer -n 2 gpt_pile_composer.py` or `qsub slm_gpt2_train_composer_2gpu.sh`.
 
 
 The composer implementation is the most fully-featured right now. So far, it can:
