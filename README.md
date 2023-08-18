@@ -1,4 +1,4 @@
-# Simple Small Language Model Training
+# "Simple" Small Language Model Training
 
 This repo is an attempt to set up training of a language model on the [pile](https://pile.eleuther.ai/)
 using a bunch of libraries: [huggingface](https://huggingface.co/), [wandb](https://wandb.ai), [pytorch lightning](https://lightning.ai/docs/pytorch/latest/), [composer](https://docs.mosaicml.com/projects/composer/en/stable/index.html), [streaming](https://github.com/mosaicml/streaming) and [hydra](https://hydra.cc/)
