@@ -25,6 +25,7 @@ from logging_mosaic import Accuracy, BitsPerByte, Loss
 from train_lm import get_only_loss_from_logits
 from gpt import GPT
 from load_pile import get_dataloaders
+from wandb_logger_autoresume import WandBLoggerWithAutoResume
 
 
 class Model(ComposerModel):
@@ -126,7 +127,10 @@ def train(config: DictConfig) -> None:
     # Trainer because the checkpoint file is identified and loaded AFTER the wandb logger
     # is initialized. However, the wandb run id is indeed stored in the checkpoint, so if we
     # manually lookup the checkpoint file at this point, we would be able to load.
-    wandb_logger = WandBLogger(project=config.wandb.project)
+    wandb_logger = WandBLoggerWithAutoResume(
+        project=config.wandb.project,
+        resume=config.run_name is not None,
+    )
 
     # start setting up callbacks. These are basically sets of functions that the
     # Trainer will call for us at appropriate times.
