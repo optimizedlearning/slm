@@ -140,14 +140,9 @@ def train(config: DictConfig) -> None:
     # define lightning module
     model = Model(config=config, tokenizer=tokenizer)
 
-    # wandb logger, as wrapped by pytorch lightning. This will make the wand logging
-    # object accessible as self.log in the pytorch module.
+    # wandb logger, wrapped as a composer LoggerDestination. This will make
+    # the metrics in model.get_metrics be logged automatically to wandb.
     # it will also take care of initializing and tearing down the wandb logging process.
-    # TODO: currently if the run is resumed, the wandb_logger will NOT resume from the
-    # same run id. This is mildly annoying to fix with the "autoresume" option to
-    # Trainer because the checkpoint file is identified and loaded AFTER the wandb logger
-    # is initialized. However, the wandb run id is indeed stored in the checkpoint, so if we
-    # manually lookup the checkpoint file at this point, we would be able to load.
     wandb_logger = WandBLoggerWithAutoResume(
         project=config.wandb.project,
         resume=config.run_name is not None,
@@ -163,15 +158,12 @@ def train(config: DictConfig) -> None:
         RuntimeEstimator(),
     ]
 
-    # if config.train.max_time_hours is not None:
-    #     # this callback will stop the training after the specified number of hours.
-    #     callbacks.append(Timer({'hours': config.train.max_time_hours}))
 
     if config.train.compile:
         # we use the default compile mode.
         # See compile mode descriptions here: https://pytorch.org/get-started/pytorch-2.0/#user-experience
         # Using 'max-autotune' seems to  increase memory usage, especially on multiple GPUs.
-        # In my experiments, 1 V100 GPU could run GPT2 with a batch size of 8,
+        # In my experiments, 1 V100 GPU could run GPT2 with a batch size of 10,
         # but 2 GPUs would OOM with a batch size of 8 per GPU if mode='max-autotune'
         compile_config = {"mode": "default"}
     else:
