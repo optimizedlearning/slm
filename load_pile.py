@@ -36,6 +36,7 @@ import hashlib
 # I'm going to assume that that is unlikely.
 streaming.base.util.clean_stale_shared_memory()
 
+
 # There is an deadlock issue in the implementation of StreamingDataset
 # when the process creates an iterator of the StreamingDataset
 # and then exits before iterating through the entire dataset.
@@ -81,7 +82,8 @@ class StreamingTextDataset(streaming.StreamingDataset):
         # Then, we create in a way that will not complain if it already exists.
         self.cache_dir = os.path.join(
             "streaming_decompression_cache_dir_safe_to_delete",
-            hashlib.md5(data_dir.encode('ascii')).hexdigest())
+            hashlib.md5(data_dir.encode("ascii")).hexdigest(),
+        )
         pathlib.Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
         super().__init__(
             remote=data_dir,
@@ -170,6 +172,9 @@ def get_next_token_dataloader(
     record_bytes_tokenized: bool = True,
     **kwargs,
 ):
+    # generate a dataloader that processes the raw text from the batch
+    # and generates token ids for inputs and targets. The targets are
+    # simply the inputs shifted in time by 1, so that inputs[x+1]=targets[x].
     collate_fn = functools.partial(
         collate_next_token_prediction,
         tokenizer=tokenizer,
@@ -183,10 +188,9 @@ def get_next_token_dataloader(
     return loader
 
 
-
-def get_dataloaders(data_dir: str, config: DictConfig, tokenizer) -> (DataLoader, DataLoader):
-    # data_dir = '/projectnb/aclab/datasets/pile/mds'
-    
+def get_dataloaders(
+    data_dir: str, config: DictConfig, tokenizer
+) -> (DataLoader, DataLoader):
     train_dataset = StreamingTextDataset(
         data_dir,
         split="train",
@@ -201,7 +205,8 @@ def get_dataloaders(data_dir: str, config: DictConfig, tokenizer) -> (DataLoader
         record_bytes_tokenized=config.train.log_bits_per_byte,
         batch_size=config.train.per_device_batch_size,
         num_workers=config.train.dataloader_workers,
-        prefetch_factor=config.train.prefetch_factor)
+        prefetch_factor=config.train.prefetch_factor,
+    )
 
     valid_dataset = StreamingTextDataset(
         data_dir,
@@ -213,6 +218,7 @@ def get_dataloaders(data_dir: str, config: DictConfig, tokenizer) -> (DataLoader
         tokenizer,
         max_length=config.model.context_length,
         record_bytes_tokenized=config.train.log_bits_per_byte,
-        batch_size=config.train.per_device_batch_size)
+        batch_size=config.train.per_device_batch_size,
+    )
 
     return train_loader, valid_loader

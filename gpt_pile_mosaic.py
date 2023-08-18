@@ -8,7 +8,6 @@ import logging
 
 from composer import Trainer
 from composer.models import ComposerModel
-from composer.loggers import WandBLogger
 from composer.algorithms import GradientClipping
 from composer.callbacks import (
     SpeedMonitor,
@@ -44,10 +43,11 @@ class Model(ComposerModel):
         self.ignore_index = tokenizer(tokenizer.pad_token)["input_ids"][0]
 
     def forward(self, batch):
-        """
-        batch is the output of the dataloader, so we need to process it
-        to get the token indices to provde to self.model
-        """
+        # batch is the output of the dataloader, so we need to process it
+        # to get the token indices to provde to self.model
+
+        # This function is allowed to return basically anything: its output
+        # will be provided as the first input to self.loss.
         token_indices = batch["input_ids"]  # [B, L]
         logits = self.model(token_indices)
         loss = get_only_loss_from_logits(logits, batch, self.ignore_index)
@@ -57,6 +57,9 @@ class Model(ComposerModel):
     # This torchmetrics stuff seems overly complicated, but apparently it might help
     # with doing metrics properly in distributed settings, so we'll try to make it work.
     def get_metrics(self, is_train):
+        """
+        outputs a dictionary of TorchMetrics objects to be logged in train and eval
+        """
         # see https://docs.mosaicml.com/projects/composer/en/stable/composer_model.html#metrics
         metrics = {"accuracy": Accuracy(), "loss": Loss()}
 
@@ -66,14 +69,31 @@ class Model(ComposerModel):
         return metrics
 
     def update_metric(self, batch, outputs, metric):
+        # here we need to call the update function of the given metric
+        # Unfortunately, we do not actually know the name of the metric,
+        # so the simplest thing is to just have all metrics take the same
+        # arguments in the update function and have them sort out themselves
+        # what to do with those arguments. It means that this function is
+        # basically a no-op, and some metrics will get more information
+        # than they really need.
         metric.update(self, batch, outputs)
 
     def loss(self, loss_logits, batch):
+        """
+        compute the loss.
+
+        First argument is the output of self.forward.
+        Second output is the batch (also the input to self.forward).
+        """
         loss, logits = loss_logits
         return loss
 
+
 def get_scheduler(config, optimizer):
     def lr_schedule(step):
+        """
+        a scale factor to scale the lr as a function of the step count.
+        """
         scale = 1.0
         warmup_ratio = config.train.lr_warmup / config.train.max_steps
         current_ratio = step / config.train.max_steps
@@ -89,6 +109,7 @@ def get_scheduler(config, optimizer):
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_schedule)
     return scheduler
+
 
 @hydra.main(version_base=None, config_path="conf", config_name="config_gpt")
 def train(config: DictConfig) -> None:
@@ -134,7 +155,13 @@ def train(config: DictConfig) -> None:
 
     # start setting up callbacks. These are basically sets of functions that the
     # Trainer will call for us at appropriate times.
-    callbacks = [LRMonitor(), SpeedMonitor(), OptimizerMonitor(), MemoryMonitor(), RuntimeEstimator()]
+    callbacks = [
+        LRMonitor(),
+        SpeedMonitor(),
+        OptimizerMonitor(),
+        MemoryMonitor(),
+        RuntimeEstimator(),
+    ]
 
     # if config.train.max_time_hours is not None:
     #     # this callback will stop the training after the specified number of hours.
@@ -190,7 +217,7 @@ def train(config: DictConfig) -> None:
         save_filename=config.checkpoint.name_format
         or "ep{epoch}-ba{batch}-rank{rank}.pt",
         autoresume=config.run_name is not None,
-        console_log_interval='10ba',
+        console_log_interval="10ba",
     )
 
     # upload the config
