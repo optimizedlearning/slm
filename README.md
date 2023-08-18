@@ -32,11 +32,27 @@ a process doesn't exit properly. You probably don't need to run it very much.
 * gpt.py: This contains the pytorch modeling code for a gpt model.
 * gpt_pile_composer.py: This is a "main" script that trains a gpt model on the pile dataset. It uses `composer`.
 * gpt_pile_lightning.py: This trains using the pytorch lightning framework.
-* load_text_hf.py: Generates dataloaders for text data (including the pile) using huggingface `datasets` library in streaming mode.
+* load_text_hf.py: Generates dataloaders for text data (including the pile) using huggingface `datasets` library in streaming mode. Currently not used.
 * load_text_streaming.py: Generates dataloaders for text data using mosaicML `streaming` library.
 * logging_lightning.py: Custom loggers for pytorch lightning specifying various metrics we want to store.
 * logging_composer.py: Custom logging metrics for use with composer.
 * loss_utils.py: code for computing various losses.
+* wandb_logger_autoresume.py: a patch for the built-in wandb logger that will properly resume runs.
+* progress_bar_autoresume.py: a patch for the built-in progress bar that will properly resume runs.
 * requirements.txt: lists module requirements. You can install with `pip install -r requirements.txt`
 * scc_setup.sh: When on the BU SCC, `source scc_setup.sh` will set up your environment (including `pip install`).
 * slm_*.sh: These scripts will train a GPT2-sized model. No tuning has been done on the hyperparameters. 
+* conf/*: This directory holds config files. Check the omegaconf and hydra docs to see how they work and are merged together.
+
+### Reading order
+To understand the code, I recommend focusing on `composer` files and ignoring anything that says `lightning` in the name (or you could do the reverse). Recommended ordering:
+1. `gpt.py`
+2. `gpt_pile_composer.py`
+3. `loss_utils.py`
+3. `load_text_streaming.py`
+4. `logging_lightning.py`
+5. `progress_bar_autoresume.py`
+6. `wandb_logger_autoresume.py`
+
+
+
