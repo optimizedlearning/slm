@@ -3,7 +3,7 @@
 This repo is an attempt to set up training of a language model on the [pile](https://pile.eleuther.ai/)
 using a bunch of libraries: [huggingface](https://huggingface.co/), [wandb](https://wandb.ai), [pytorch lightning](https://lightning.ai/docs/pytorch/latest/), [composer](https://docs.mosaicml.com/projects/composer/en/stable/index.html), [streaming](https://github.com/mosaicml/streaming) and [hydra](https://hydra.cc/)
 
-The goal is to provide an example of how all these tools can be put together.
+The goal is to provide an example of how all these tools can be put together, in a way that can hopefully be easily extended to other projects.
 The model is a GPT model, with comments describing where the various architectural decision came from in the paper.
 
 To run: if you are on BU's SCC, you can start with `source scc_setup.sh`. 
