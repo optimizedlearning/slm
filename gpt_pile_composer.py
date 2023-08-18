@@ -23,7 +23,7 @@ from composer.callbacks import (
 from transformers import GPT2TokenizerFast
 
 # our code imports
-from logging_mosaic import Accuracy, BitsPerByte, Loss
+from logging_composer import Accuracy, BitsPerByte, Loss
 from train_lm import get_only_loss_from_logits
 from gpt import GPT
 from load_pile import get_dataloaders
